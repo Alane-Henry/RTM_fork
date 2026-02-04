@@ -76,6 +76,7 @@ def _normalize_shapes(shapes, fallback):
     return normalized
 
 
+<<<<<<< codex/calculate-parameters-for-different-resolutions-h4rych
 def _build_dummy_extras(model: BaseSegmentor, input_shape: tuple[int, int, int]):
     extra_names = []
     if hasattr(model, 'extra_names') and model.extra_names is not None:
@@ -112,6 +113,9 @@ def _model_needs_extras(model: BaseSegmentor) -> bool:
 
 def inference(args: argparse.Namespace,
               logger: MMLogger) -> tuple[dict, BaseSegmentor, tuple]:
+=======
+def inference(args: argparse.Namespace, logger: MMLogger) -> tuple[dict, BaseSegmentor]:
+>>>>>>> main
     config_name = Path(args.config)
 
     if not config_name.exists():
@@ -169,7 +173,11 @@ def inference(args: argparse.Namespace,
     result['flops'] = _format_size(outputs['flops'])
     result['params'] = _format_size(outputs['params'])
     result['compute_type'] = 'direct: randomly generate a picture'
+<<<<<<< codex/calculate-parameters-for-different-resolutions-h4rych
     return result, model, model_inputs
+=======
+    return result, model
+>>>>>>> main
 
 
 def main():
@@ -177,7 +185,11 @@ def main():
     args = parse_args()
     logger = MMLogger.get_instance(name='MMLogger')
 
+<<<<<<< codex/calculate-parameters-for-different-resolutions-h4rych
     result, model, _ = inference(args, logger)
+=======
+    result, model = inference(args, logger)
+>>>>>>> main
     split_line = '=' * 30
     ori_shape = result['ori_shape']
     pad_shape = result['pad_shape']
