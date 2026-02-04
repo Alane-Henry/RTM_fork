@@ -18,6 +18,10 @@ try:
     from mmengine.analysis.print_helper import _format_size
 except ImportError:
     raise ImportError('Please upgrade mmengine >= 0.6.0 to use this script.')
+try:
+    from fvcore.nn import parameter_count_table
+except ImportError:
+    raise ImportError('Please install fvcore to use parameter counting.')
 
 
 def parse_args():
@@ -30,6 +34,19 @@ def parse_args():
         nargs='+',
         default=[2048, 1024],
         help='input image size')
+    parser.add_argument(
+        '--param-shapes',
+        type=int,
+        nargs='+',
+        action='append',
+        default=None,
+        help='input image sizes for parameter reporting; can be repeated, '
+        'e.g. --param-shapes 512 512 --param-shapes 1024 512')
+    parser.add_argument(
+        '--param-depth',
+        type=int,
+        default=3,
+        help='max module depth for fvcore parameter table')
     parser.add_argument(
         '--cfg-options',
         nargs='+',
@@ -44,7 +61,21 @@ def parse_args():
     return args
 
 
-def inference(args: argparse.Namespace, logger: MMLogger) -> dict:
+def _normalize_shapes(shapes, fallback):
+    if shapes is None:
+        shapes = [fallback]
+    normalized = []
+    for shape in shapes:
+        if len(shape) == 1:
+            normalized.append((shape[0], shape[0]))
+        elif len(shape) == 2:
+            normalized.append(tuple(shape))
+        else:
+            raise ValueError('invalid input shape')
+    return normalized
+
+
+def inference(args: argparse.Namespace, logger: MMLogger) -> tuple[dict, BaseSegmentor]:
     config_name = Path(args.config)
 
     if not config_name.exists():
@@ -93,7 +124,7 @@ def inference(args: argparse.Namespace, logger: MMLogger) -> dict:
     result['flops'] = _format_size(outputs['flops'])
     result['params'] = _format_size(outputs['params'])
     result['compute_type'] = 'direct: randomly generate a picture'
-    return result
+    return result, model
 
 
 def main():
@@ -101,13 +132,17 @@ def main():
     args = parse_args()
     logger = MMLogger.get_instance(name='MMLogger')
 
-    result = inference(args, logger)
+    result, model = inference(args, logger)
     split_line = '=' * 30
     ori_shape = result['ori_shape']
     pad_shape = result['pad_shape']
     flops = result['flops']
     params = result['params']
     compute_type = result['compute_type']
+    param_shapes = _normalize_shapes(args.param_shapes, args.shape)
+    param_table = parameter_count_table(model, max_depth=args.param_depth)
+    total_params = sum(p.numel() for p in model.parameters())
+    total_params_fmt = _format_size(total_params)
 
     if pad_shape != ori_shape:
         print(f'{split_line}\nUse size divisor set input shape '
@@ -115,6 +150,11 @@ def main():
     print(f'{split_line}\nCompute type: {compute_type}\n'
           f'Input shape: {pad_shape}\nFlops: {flops}\n'
           f'Params: {params}\n{split_line}')
+    for shape in param_shapes:
+        print(f'{split_line}\nParameter stats (fvcore)\n'
+              f'Input shape: {shape}\nTotal params: {total_params_fmt}\n'
+              f'{split_line}')
+        print(param_table)
     print('!!!Please be cautious if you use the results in papers. '
           'You may need to check if all ops are supported and verify '
           'that the flops computation is correct.')
