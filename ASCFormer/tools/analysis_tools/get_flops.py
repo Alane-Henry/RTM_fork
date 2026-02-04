@@ -1,5 +1,6 @@
 # Copyright (c) OpenMMLab. All rights reserved.
 import argparse
+import inspect
 import tempfile
 from pathlib import Path
 
@@ -75,7 +76,46 @@ def _normalize_shapes(shapes, fallback):
     return normalized
 
 
+<<<<<<< codex/calculate-parameters-for-different-resolutions-h4rych
+def _build_dummy_extras(model: BaseSegmentor, input_shape: tuple[int, int, int]):
+    extra_names = []
+    if hasattr(model, 'extra_names') and model.extra_names is not None:
+        extra_names = list(model.extra_names)
+    if hasattr(model, 'key_sec') and isinstance(model.key_sec, str):
+        extra_names.append(model.key_sec)
+
+    extra_names = [name for name in extra_names if name != 'img']
+    if not extra_names:
+        return {}
+
+    _, height, width = input_shape
+    extras = {}
+    for name in set(extra_names):
+        if name == 'dct':
+            extras[name] = torch.rand(1, height, width)
+            extras.setdefault('qtable', torch.ones(1, 8, 8))
+        elif name == 'qtable':
+            extras[name] = torch.ones(1, 8, 8)
+        else:
+            extras[name] = torch.rand(3, height, width)
+    return extras
+
+
+def _preprocessor_supports_extras(model: BaseSegmentor) -> bool:
+    data_preprocessor = getattr(model, 'data_preprocessor', None)
+    return data_preprocessor is not None and hasattr(data_preprocessor, 'extra_pad_val')
+
+
+def _model_needs_extras(model: BaseSegmentor) -> bool:
+    signature = inspect.signature(model.forward)
+    return 'extras' in signature.parameters
+
+
+def inference(args: argparse.Namespace,
+              logger: MMLogger) -> tuple[dict, BaseSegmentor, tuple]:
+=======
 def inference(args: argparse.Namespace, logger: MMLogger) -> tuple[dict, BaseSegmentor]:
+>>>>>>> main
     config_name = Path(args.config)
 
     if not config_name.exists():
@@ -109,22 +149,35 @@ def inference(args: argparse.Namespace, logger: MMLogger) -> tuple[dict, BaseSeg
         'inputs': [torch.rand(input_shape)],
         'data_samples': [SegDataSample(metainfo=result)]
     }
+    if _model_needs_extras(model) or _preprocessor_supports_extras(model):
+        dummy_extras = _build_dummy_extras(model, input_shape)
+        data_batch['extra'] = {key: [value] for key, value in dummy_extras.items()}
     data = model.data_preprocessor(data_batch)
     model.eval()
+    if hasattr(model, 'vis_preprocessor'):
+        model.vis_preprocessor = None
     if cfg.model.decode_head.type in ['MaskFormerHead', 'Mask2FormerHead']:
         # TODO: Support MaskFormer and Mask2Former
         raise NotImplementedError('MaskFormer and Mask2Former are not '
                                   'supported yet.')
+    if _model_needs_extras(model):
+        model_inputs = (data['inputs'], data.get('extras', None), data['data_samples'])
+    else:
+        model_inputs = (data['inputs'], data['data_samples'])
     outputs = get_model_complexity_info(
         model,
         input_shape,
-        inputs=data['inputs'],
+        inputs=model_inputs,
         show_table=False,
         show_arch=False)
     result['flops'] = _format_size(outputs['flops'])
     result['params'] = _format_size(outputs['params'])
     result['compute_type'] = 'direct: randomly generate a picture'
+<<<<<<< codex/calculate-parameters-for-different-resolutions-h4rych
+    return result, model, model_inputs
+=======
     return result, model
+>>>>>>> main
 
 
 def main():
@@ -132,7 +185,11 @@ def main():
     args = parse_args()
     logger = MMLogger.get_instance(name='MMLogger')
 
+<<<<<<< codex/calculate-parameters-for-different-resolutions-h4rych
+    result, model, _ = inference(args, logger)
+=======
     result, model = inference(args, logger)
+>>>>>>> main
     split_line = '=' * 30
     ori_shape = result['ori_shape']
     pad_shape = result['pad_shape']
